@@ -1,0 +1,66 @@
+import argparse
+import sys
+import os
+import hashlib
+from kcp.core import compress_to_kcp, decompress_from_kcp
+
+def calculate_sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+def main():
+    parser = argparse.ArgumentParser(description="KCP Order-2 Delta Arithmetic Codec CLI")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-c', '--compress', action='store_true', help="Compress input file to .kcp")
+    group.add_argument('-d', '--decompress', action='store_true', help="Decompress .kcp file")
+    
+    parser.add_argument('input', type=str, help="Input file path")
+    parser.add_argument('output', type=str, help="Output file path")
+
+    args = parser.parse_args()
+
+    if not os.path.exists(args.input):
+        print(f"Error: Input file '{args.input}' not found.")
+        sys.exit(1)
+
+    with open(args.input, 'rb') as f:
+        input_data = f.read()
+
+    if args.compress:
+        print(f"Encoding '{args.input}'...")
+        orig_hash = calculate_sha256(input_data)
+        
+        try:
+            kcp_data = compress_to_kcp(input_data)
+            with open(args.output, 'wb') as f:
+                f.write(kcp_data)
+            
+            orig_size = len(input_data)
+            kcp_size = len(kcp_data)
+            ratio = ((orig_size - kcp_size) / orig_size * 100) if orig_size > 0 else 0
+            
+            print(f"Success: Packed to '{args.output}'")
+            print(f"Original Size: {orig_size:,} bytes")
+            print(f"KCP Size:      {kcp_size:,} bytes")
+            print(f"Space Saved:   {ratio:.2f}%")
+            print(f"SHA-256:       {orig_hash}")
+        except Exception as e:
+            print(f"Compression failed: {e}")
+            sys.exit(1)
+
+    elif args.decompress:
+        print(f"Decoding '{args.input}'...")
+        try:
+            restored_data = decompress_from_kcp(input_data)
+            with open(args.output, 'wb') as f:
+                f.write(restored_data)
+            
+            restored_hash = calculate_sha256(restored_data)
+            print(f"Success: Restored to '{args.output}'")
+            print(f"Restored Size: {len(restored_data):,} bytes")
+            print(f"SHA-256:       {restored_hash}")
+        except Exception as e:
+            print(f"Decompression failed: {e}")
+            sys.exit(1)
+
+if __name__ == "__main__":
+    main()
